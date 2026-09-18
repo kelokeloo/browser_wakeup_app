@@ -39,7 +39,12 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
-    if (app.isPackaged) {
+    // Linux 不调用 setAsDefaultProtocolClient：协议关联由安装包里的 .desktop
+    // 文件建立（见 packaging/linux），系统据此解析默认处理程序，无需应用注册。
+    // 而 Electron 在 Linux 上把它实现为 `xdg-settings set
+    // default-url-scheme-handler`；麒麟的 XDG 将桌面识别为 gnome3，该分支会把
+    // 默认 MIME 落成 text/html，让本应用顶替浏览器成为 .html 的默认程序。
+    if (app.isPackaged && process.platform !== 'linux') {
       app.setAsDefaultProtocolClient(SCHEME);
     }
 

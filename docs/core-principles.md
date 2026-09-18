@@ -129,9 +129,41 @@ Linux 覆盖麒麟、统信 UOS 等国产化系统。**国产化系统在技术�
 
 ### 建立协议关联
 
-安装 `.deb` 时，把 `.desktop` 文件放进 `/usr/share/applications/`（权限须为 `644`，其他权限会被系统忽略）。系统据此在 `mimeapps.list` 中记下 `wakeup-demo://` 与这个 `.desktop` 的对应关系。
+安装 `.deb` 时，把 `.desktop` 文件放进 `/usr/share/applications/`（权限须为 `644`，其他权限会被系统忽略），并在 `MimeType` 中声明 `x-scheme-handler/wakeup-demo`。打包脚本会触发 `update-desktop-database` 刷新数据库，这一步由 `desktop-file-utils` 的 dpkg 触发器自动完成，无需自己写 `postinst`。
 
-打包脚本同时会执行 `update-desktop-database` 刷新数据库；这一步由 `desktop-file-utils` 的 dpkg 触发器自动完成，无需自己写 `postinst`。注册**立即生效，不需要注销或重启**。
+刷新后 `/usr/share/applications/mimeinfo.cache` 里就有了这条对应关系。它是该协议**唯一的候选**，系统据此解析出默认处理程序：
+
+```sh
+xdg-mime query default x-scheme-handler/wakeup-demo   # → wakeup-demo.desktop
+```
+
+即便 `~/.config/mimeapps.list` 里完全没有该协议的条目，这一步同样成立——**关联不需要应用自己注册**。注册立即生效，不需要注销或重启。
+
+### 应用为什么不调用 setAsDefaultProtocolClient
+
+因为上面那步已经把关联做完了，应用再注册一次纯属多余。而且在 Linux 上它不只是多余，**是有害的**，所以主进程里带了这个判断：
+
+```js
+if (app.isPackaged && process.platform !== 'linux') {
+  app.setAsDefaultProtocolClient(SCHEME);
+}
+```
+
+Electron ≤ 42.0.0 把 `setAsDefaultProtocolClient` 实现为外部命令 `xdg-settings set default-url-scheme-handler <协议> <desktop 文件>`。麒麟的 `xdg-settings` 把桌面识别为 `gnome3`，而该分支在设置协议时会把默认 MIME 一并落成 `text/html`：
+
+```sh
+# 在麒麟上执行，等价于 Electron 31.7.7 内部发出的那次调用
+CHROME_DESKTOP=wakeup-demo.desktop \
+  xdg-settings set default-url-scheme-handler wakeup-demo wakeup-demo.desktop
+
+xdg-mime query default text/html
+# 执行前：qaxbrowser-safe.desktop
+# 执行后：wakeup-demo.desktop      ← 应用顶替了浏览器，.html 文件都会被它打开
+```
+
+Electron 42.11.4 起改为进程内调用 GIO，只动目标协议，没有这个副作用。
+
+本 demo 按线上应用锁定在 31.7.7，正属于会踩坑的版本。**保障来自应用侧这个判断，而不是版本号**——升级 Electron 之后也不该把它删掉。
 
 ### 应用未运行时
 
