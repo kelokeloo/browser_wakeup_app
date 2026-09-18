@@ -7,7 +7,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "pnpm build && electron .",
-    "package:mac": "pnpm build && node scripts/package-macos.mjs"
+    "package:mac": "pnpm build && node scripts/package-macos.mjs",
+    "package:win": "pnpm build && node scripts/package-windows.mjs"
   },
   "dependencies": {
     "@wakeup/deep-link": "workspace:*"

@@ -15,3 +15,16 @@ export function parseDeepLink(url) {
 
   return null;
 }
+
+// Electron 可能调整参数顺序或追加参数，不能假定链接在最后一项。
+export function parseDeepLinkArgs(argv) {
+  for (const arg of argv) {
+    const page = parseDeepLink(arg);
+
+    if (page) {
+      return page;
+    }
+  }
+
+  return null;
+}

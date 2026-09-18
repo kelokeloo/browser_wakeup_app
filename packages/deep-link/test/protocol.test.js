@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { HOME_URL, DETAIL_URL, parseDeepLink } from '../src/index.js';
+import {
+  HOME_URL,
+  DETAIL_URL,
+  parseDeepLink,
+  parseDeepLinkArgs,
+} from '../src/index.js';
 
 test('两个固定链接解析为对应页面', () => {
   assert.equal(parseDeepLink(HOME_URL), 'home');
@@ -27,4 +32,34 @@ test('非法链接不会生成页面指令', () => {
   for (const url of invalidUrls) {
     assert.equal(parseDeepLink(url), null, url);
   }
+});
+
+test('Windows 启动参数中的链接不受位置和额外参数影响', () => {
+  const executable = String.raw`C:\Program Files\Wakeup Demo\Wakeup Demo.exe`;
+
+  assert.equal(parseDeepLinkArgs([executable, DETAIL_URL]), 'detail');
+  assert.equal(
+    parseDeepLinkArgs([
+      executable,
+      '--allow-file-access-from-files',
+      HOME_URL,
+      '--original-process-start-time=12345',
+    ]),
+    'home',
+  );
+});
+
+test('普通启动和非法链接参数不会生成页面指令', () => {
+  assert.equal(parseDeepLinkArgs([]), null);
+  assert.equal(parseDeepLinkArgs(['Wakeup Demo.exe', '--some-flag']), null);
+  assert.equal(
+    parseDeepLinkArgs([
+      'Wakeup Demo.exe',
+      'https://app/home',
+      'wakeup-demo://app/detail?id=1001',
+      'wakeup-demo://app/unknown',
+      '--url=wakeup-demo://app/home',
+    ]),
+    null,
+  );
 });

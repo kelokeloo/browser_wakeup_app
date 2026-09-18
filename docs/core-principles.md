@@ -1,76 +1,99 @@
-# 浏览器唤起 Electron：核心只有两步
+# 浏览器唤起 Electron：macOS 与 Windows 流程
+
+以下以本 demo 的打包应用和 `wakeup-demo://app/detail` 为例，假设浏览器已允许打开链接。A、B 分别表示同一个应用先后启动的两份主进程。
+
+## macOS 的完整流程
+
+### 建立协议关联
+
+- **声明支持的协议**：[打包配置](../apps/desktop/packaging/macos/config.js)将 `wakeup-demo` 写入应用包的 `Info.plist`。
+- **注册默认关联**：手动打开一次应用，调用 `app.setAsDefaultProtocolClient(SCHEME)`，让系统遇到该协议时选择这个应用。
+
+### 应用未运行时
 
 ```mermaid
-flowchart LR
-    subgraph Step1["第一步：建立协议关联"]
-        A["应用声明支持的协议<br/>并设为默认处理应用"] --> B["操作系统保存<br/>协议 → 应用"]
-    end
-
-    subgraph Step2["第二步：接收链接并打开窗口"]
-        C["浏览器打开协议链接"] --> D["操作系统找到并唤起应用"]
-        D --> E["应用接收链接<br/>打开对应窗口"]
-    end
-
-    B -.->|根据已有关联查找| D
+sequenceDiagram
+    participant Web as 浏览器
+    participant OS as macOS
+    participant A as 应用 A
+    Web->>OS: 打开详情链接
+    OS->>A: 查找关联，启动应用
+    Note over A: 初始化时监听 open-url
+    OS->>A: 交付 URL，Electron 触发 open-url
+    A->>A: 解析链接，待就绪后打开详情窗口
 ```
 
-## 第一步：建立协议与应用的关联
+[`open-url`](https://www.electronjs.org/docs/latest/api/app#event-open-url-macos) 可能在 `ready` 前到达，所以要提前监听；尚未就绪时先保存到 `pendingPage`，就绪后再创建窗口。
 
-先声明应用支持处理的协议，再将应用设为该协议的默认处理应用。
+### 应用已运行时
 
-[macOS 打包配置](../apps/desktop/packaging/macos/config.js)声明 `wakeup-demo`，打包工具将其写入应用的 `Info.plist`：
-
-```js
-protocols: [{ name: 'Wakeup Demo Link', schemes: ['wakeup-demo'] }],
+```mermaid
+sequenceDiagram
+    participant Web as 浏览器
+    participant OS as macOS
+    participant A as 已运行的应用 A
+    Web->>OS: 打开详情链接
+    OS->>A: 向已有应用交付 URL
+    A->>A: open-url 回调解析链接，创建详情窗口
 ```
 
-[主进程](../apps/desktop/src/main.js)在打包应用启动时设置默认处理应用：
+常规系统协议唤起直接复用 A，通过 `open-url` 交付新链接。
 
-```js
-if (app.isPackaged) {
-  app.setAsDefaultProtocolClient(SCHEME);
-}
+## Windows 的完整流程
+
+### 注册启动命令
+
+手动打开一次打包应用，调用 `app.setAsDefaultProtocolClient(SCHEME)`。Windows 将协议与下面的启动命令关联，保存在注册表中：
+
+```text
+"<打包目录>\Wakeup Demo.exe" "%1"
 ```
 
-`SCHEME` 是 `'wakeup-demo'`。先手动打开一次打包应用，建立系统关联；应用退出后，关联仍可保留。`app.isPackaged` 只表示是否为打包应用，不表示是否已注册，因此这段代码每次启动打包应用都会执行。
+`%1` 代表完整 URL。**按照本 demo 的注册方式，每次打开协议链接，Windows 都会执行这条命令，启动一份应用实例。** 已有应用接手请求的过程由 Electron 的单实例机制完成。
 
-## 第二步：应用接收链接，打开对应窗口
+### 应用未运行时
 
-关联建立后，浏览器负责发起打开请求，操作系统负责找到应用，应用自己决定打开哪个窗口。
-
-macOS 通过 `open-url` 事件交付完整 URL。本 demo 不处理查询参数，只识别两个固定链接：
-
-| 链接                       | 窗口加载的文件 |
-| -------------------------- | -------------- |
-| `wakeup-demo://app/home`   | `home.html`    |
-| `wakeup-demo://app/detail` | `detail.html`  |
-
-[主进程](../apps/desktop/src/main.js)接收链接，由共享包的 `parseDeepLink()` 返回 `'home'`、`'detail'` 或 `null`：
-
-```js
-app.on('open-url', (event, url) => {
-  event.preventDefault();
-  const page = parseDeepLink(url);
-
-  if (!page) {
-    return;
-  }
-
-  if (app.isReady()) {
-    openWindow(page);
-  } else {
-    pendingPage = page;
-  }
-});
+```mermaid
+sequenceDiagram
+    participant Web as 浏览器
+    participant OS as Windows
+    participant A as 新启动的应用 A
+    Web->>OS: 打开详情链接
+    OS->>A: 执行注册命令，URL 作为启动参数
+    A->>A: 从 process.argv 解析链接
+    A->>A: 获取单实例锁，设置 second-instance 监听
+    A->>A: 就绪后创建详情窗口
 ```
 
-系统可能在 Electron 就绪前交付启动链接，因此提前监听；未就绪时暂存目标，`app.whenReady()` 中再打开它。手动启动没有目标链接时，默认打开首页。
+此时只有 A，链接直接从自己的 `process.argv` 读取，不会触发 `second-instance`。
 
-`openWindow()` 的核心就是创建窗口并加载对应文件：
+### 应用已运行时
 
-```js
-const window = new BrowserWindow({ width: 640, height: 480 });
-window.loadFile(path.join(__dirname, `${page}.html`));
+A 已持有单实例锁，并设置好监听。再次点击链接，Windows 会启动同一个 `.exe` 的另一份主进程 B；这就是“第二个进程”。
+
+```mermaid
+sequenceDiagram
+    participant Web as 浏览器
+    participant OS as Windows
+    participant B as 新启动的应用 B
+    participant A as 已运行的应用 A
+    Web->>OS: 打开详情链接
+    OS->>B: 再次执行 exe，带上 URL
+    B->>B: 执行 main.js，申请单实例锁
+    Note over B: A 已持有锁，B 获取失败
+    B-->>A: Electron 转交 B 的启动参数
+    A->>A: second-instance 回调读取 argv，创建详情窗口
+    B->>B: demo 调用 app.quit()，退出
 ```
 
-上面省略了源码中的窗口安全配置。每次点击都会新建一个对应窗口。页面只展示静态 HTML，不需要 preload、IPC 或页面内路由；主进程根据链接直接决定加载哪个文件。
+**监听提前设置在 A 中；B 后来调用 [`requestSingleInstanceLock()`](https://www.electronjs.org/docs/latest/api/app#apprequestsingleinstancelockadditionaldata)，才触发 A 的回调。** 窗口由 A 创建，B 在转交参数后退出，两者可以交错进行。新链接从回调的 `argv` 读取，A 自己的 `process.argv` 不会随之更新。
+
+## 两条流程的关键差异
+
+| 场景               | macOS                            | Windows                                                      |
+| ------------------ | -------------------------------- | ------------------------------------------------------------ |
+| 应用未运行         | 启动 A，通过 `open-url` 交付链接 | 启动 A，从自身 `process.argv` 读取链接                       |
+| 应用已运行         | 系统直接向 A 交付 `open-url`     | 系统先启动 B，Electron 再把参数交给 A 的 `second-instance`   |
+| 应用需要处理的入口 | `open-url`，注意就绪时机         | 冷启动读 `process.argv`，再次唤起读 `second-instance` 的参数 |
+
+对应代码在[主进程](../apps/desktop/src/main.js)。两平台拿到链接后，都交给[共享协议包](../packages/deep-link/src/index.js)解析，再由 `openWindow(page)` 新建对应窗口。

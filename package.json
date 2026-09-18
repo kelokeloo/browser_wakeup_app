@@ -8,6 +8,7 @@
     "dev:desktop": "pnpm --filter @wakeup/desktop dev",
     "build": "pnpm --filter @wakeup/launcher-web build && pnpm --filter @wakeup/desktop build",
     "package:mac": "pnpm --filter @wakeup/desktop package:mac",
+    "package:win": "pnpm --filter @wakeup/desktop package:win",
     "test": "node --test packages/deep-link/test/*.test.js",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

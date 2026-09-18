@@ -5,3 +5,7 @@ packages:
 allowBuilds:
   electron: true
   esbuild: true
+
+# Packager 的旧解压依赖在 Node.js 24.16+ 上可能提前结束；使用兼容版本。
+overrides:
+  'extract-zip>yauzl': 3.4.0
