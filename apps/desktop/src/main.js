@@ -2,9 +2,12 @@ import path from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import { SCHEME, parseDeepLink, parseDeepLinkArgs } from '@wakeup/deep-link';
 
-// Windows 首次通过协议启动时，链接在当前进程的命令行参数中。
-let pendingPage =
-  process.platform === 'win32' ? parseDeepLinkArgs(process.argv) : null;
+// Windows 与 Linux 首次通过协议启动时，链接在当前进程的命令行参数中。
+// macOS 由系统通过 open-url 交付，不从这里读取。
+const readsStartupArgs =
+  process.platform === 'win32' || process.platform === 'linux';
+
+let pendingPage = readsStartupArgs ? parseDeepLinkArgs(process.argv) : null;
 
 // macOS 的启动链接可能先于 ready 到达，因此提前监听。
 app.on('open-url', (event, url) => {
@@ -25,7 +28,8 @@ app.on('open-url', (event, url) => {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  // Windows 再次唤起时，链接交给持有单实例锁的进程。
+  // Windows 与 Linux 再次唤起时，系统会另起一个进程，链接由它转交给
+  // 持有单实例锁的进程。
   app.on('second-instance', (_event, argv) => {
     const page = parseDeepLinkArgs(argv);
 
