@@ -49,6 +49,23 @@ test('Windows 启动参数中的链接不受位置和额外参数影响', () => 
   );
 });
 
+// Linux 与 Windows 的接收方式相同：系统执行 .desktop 的 Exec 行，
+// 把 URL 作为命令行参数传入。
+test('Linux 启动参数中的链接同样按 argv 识别', () => {
+  const executable = '/opt/wakeup-demo/wakeup-demo';
+
+  assert.equal(parseDeepLinkArgs([executable, HOME_URL]), 'home');
+  assert.equal(
+    parseDeepLinkArgs([
+      executable,
+      '--no-sandbox',
+      DETAIL_URL,
+      '--original-process-start-time=12345',
+    ]),
+    'detail',
+  );
+});
+
 test('普通启动和非法链接参数不会生成页面指令', () => {
   assert.equal(parseDeepLinkArgs([]), null);
   assert.equal(parseDeepLinkArgs(['Wakeup Demo.exe', '--some-flag']), null);
