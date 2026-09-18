@@ -1,0 +1,20 @@
+{
+  "name": "@wakeup/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "pnpm build && electron .",
+    "package:mac": "pnpm build && node scripts/package-macos.mjs"
+  },
+  "dependencies": {
+    "@wakeup/deep-link": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "^42.0.0",
+    "esbuild": "^0.25.0",
+    "@electron/packager": "^18.3.6"
+  }
+}

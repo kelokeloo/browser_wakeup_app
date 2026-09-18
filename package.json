@@ -1,0 +1,18 @@
+{
+  "name": "browser-wakeup-demo",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "dev:web": "pnpm --filter @wakeup/launcher-web dev",
+    "dev:desktop": "pnpm --filter @wakeup/desktop dev",
+    "build": "pnpm --filter @wakeup/launcher-web build && pnpm --filter @wakeup/desktop build",
+    "package:mac": "pnpm --filter @wakeup/desktop package:mac",
+    "test": "node --test packages/deep-link/test/*.test.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.9.7"
+  }
+}
